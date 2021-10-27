@@ -1,43 +1,36 @@
 """
 Dedalus script simulating 2D horizontally-periodic Rayleigh-Benard convection.
-This script demonstrates solving a 2D cartesian initial value problem. It can
-be ran serially or in parallel, and uses the built-in analysis framework to save
-data snapshots to HDF5 files. The `plot_snapshots.py` script can be used to
-produce plots from the saved data. The simulation should take roughly 10
-cpu-minutes to run.
 
-The problem is non-dimensionalized using the box height and freefall time, so
-the resulting thermal diffusivity and viscosity are related to the Prandtl
-and Rayleigh numbers as:
+Usage:
+    rayleigh_benard_2d.py [options]
 
-    kappa = (Rayleigh * Prandtl)**(-1/2)
-    nu = (Rayleigh / Prandtl)**(-1/2)
+Options:
+    --Nx=<Nx>              Horizontal modes [default: 128]
+    --Nz=<Nz>              Vertical modes   [default: 64]
 
-For incompressible hydro with two boundaries, we need two tau terms for each the
-velocity and buoyancy. Here we choose to use a first-order formulation, putting
-one tau term each on auxiliary first-order gradient variables and the others in
-the PDE, and lifting them all to the first derivative basis. This formulation puts
-a tau term in the divergence constraint, as required for this geometry.
-
-To run and plot using e.g. 4 processes:
-    $ mpiexec -n 4 python3 rayleigh_benard.py
-    $ mpiexec -n 4 python3 plot_snapshots.py snapshots/*.h5
 """
-
+from mpi4py import MPI
 import numpy as np
 import time
 import dedalus.public as d3
 import logging
 logger = logging.getLogger(__name__)
 
+from docopt import docopt
+args = docopt(__doc__)
+
 # TODO: maybe fix plotting to directly handle vectors
 # TODO: optimize and match d2 resolution
 # TODO: get unit vectors from coords?
 
+comm = MPI.COMM_WORLD
+rank = comm.rank
+ncpu = comm.size
 
 # Parameters
 Lx, Lz = 4, 1
-Nx, Nz = 64, 32
+Nx = int(args['--Nx'])
+Nz = int(args['--Nz'])
 Rayleigh = 1e6
 Prandtl = 1
 dealias = 3/2
@@ -94,6 +87,7 @@ problem.add_equation("p(z=Lz) = 0", condition="nx == 0") # Pressure gauge
 # Solver
 solver = problem.build_solver(timestepper)
 solver.stop_sim_time = stop_sim_time
+solver.stop_iteration = 20
 
 # Initial conditions
 zb, zt = zbasis.bounds
@@ -102,14 +96,14 @@ b['g'] *= z * (Lz - z) # Damp noise at walls
 b['g'] += Lz - z # Add linear background
 
 # Analysis
-snapshots = solver.evaluator.add_file_handler('snapshots', sim_dt=0.1, max_writes=50)
-snapshots.add_task(p)
-snapshots.add_task(b)
-snapshots.add_task(d3.dot(u,ex), name='ux')
-snapshots.add_task(d3.dot(u,ez), name='uz')
+# snapshots = solver.evaluator.add_file_handler('snapshots', sim_dt=0.1, max_writes=50)
+# snapshots.add_task(p)
+# snapshots.add_task(b)
+# snapshots.add_task(d3.dot(u,ex), name='ux')
+# snapshots.add_task(d3.dot(u,ez), name='uz')
 
 # CFL
-CFL = d3.CFL(solver, initial_dt=max_timestep, cadence=10, safety=0.5, threshold=0.1,
+CFL = d3.CFL(solver, initial_dt=max_timestep, cadence=1, safety=0.5, threshold=0.1,
              max_change=1.5, min_change=0.5, max_dt=max_timestep)
 CFL.add_velocity(u)
 
@@ -117,11 +111,14 @@ CFL.add_velocity(u)
 flow = d3.GlobalFlowProperty(solver, cadence=10)
 flow.add_property(np.sqrt(d3.dot(u,u))/nu, name='Re')
 
+startup_iter = 10
 # Main loop
 try:
     logger.info('Starting loop')
     start_time = time.time()
     while solver.proceed:
+        if solver.iteration == startup_iter:
+            main_start = time.time()
         timestep = CFL.compute_timestep()
         solver.step(timestep)
         if (solver.iteration-1) % 10 == 0:
@@ -132,8 +129,16 @@ except:
     raise
 finally:
     end_time = time.time()
-    logger.info('Iterations: %i' %solver.iteration)
-    logger.info('Sim end time: %f' %solver.sim_time)
-    logger.info('Run time: %.2f sec' %(end_time-start_time))
-    logger.info('Run time: %f cpu-hr' %((end_time-start_time)/60/60*dist.comm.size))
 
+    startup_time = main_start - start_time
+    main_loop_time = end_time - main_start
+    DOF = Nx*Nz
+    niter = solver.iteration - startup_iter
+    if rank==0:
+        print('performance metrics:')
+        print('    startup time   : {:}'.format(startup_time))
+        print('    main loop time : {:}'.format(main_loop_time))
+        print('    main loop iter : {:d}'.format(niter))
+        print('    wall time/iter : {:f}'.format(main_loop_time/niter))
+        print('          iter/sec : {:f}'.format(niter/main_loop_time))
+        print('DOF-cycles/cpu-sec : {:}'.format(DOF*niter/(ncpu*main_loop_time)))
