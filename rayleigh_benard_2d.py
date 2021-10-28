@@ -79,9 +79,10 @@ grad_b = d3.grad(b) + ez*lift(tau1b,-1) # First-order reduction
 # First-order form: "div(f)" becomes "trace(grad_f)"
 # First-order form: "lap(f)" becomes "div(grad_f)"
 problem = d3.IVP([p, b, u, tau1b, tau2b, tau1u, tau2u], namespace=locals())
-problem.add_equation("trace(grad_u) = 0")
-problem.add_equation("dt(b) - kappa*div(grad_b) + lift(tau2b,-1) = - dot(u,grad(b))")
-problem.add_equation("dt(u) - nu*div(grad_u) + grad(p) + lift(tau2u,-1) - b*ez = - dot(u,grad(u))")
+#problem.add_equation("div(u) + lift(dot(tau2u,ez),-1) = 0")
+problem.add_equation("div(u) + dot(lift(tau2u,-1),ez) = 0")
+problem.add_equation("dt(b) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
+problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = - dot(u,grad(u))")
 problem.add_equation("b(z=0) = Lz")
 problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
