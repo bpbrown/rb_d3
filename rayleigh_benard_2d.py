@@ -70,10 +70,20 @@ ez = dist.VectorField(coords, name='ez')
 ex['g'][0] = 1
 ez['g'][1] = 1
 
+exg = d3.Grid(ex).evaluate()
+ezg = d3.Grid(ez).evaluate()
+
 lift_basis = zbasis.clone_with(a=1/2, b=1/2) # First derivative basis
 lift = lambda A, n: d3.LiftTau(A, lift_basis, n)
 grad_u = d3.grad(u) + ez*lift(tau1u,-1) # First-order reduction
 grad_b = d3.grad(b) + ez*lift(tau1b,-1) # First-order reduction
+
+dx = lambda A: d3.Differentiate(A, coords[0])
+dz = lambda A: d3.Differentiate(A, coords[1])
+dot = lambda A, B: d3.DotProduct(A, B)
+curl_u_2d = dx(dot(u,ez)) - dz(dot(u,ex))
+curl_u_2d.store_last = True
+cross_u_curl_u = curl_u_2d*dot(u, exg)*ezg - curl_u_2d*dot(u, ezg)*exg
 
 # Problem
 # First-order form: "div(f)" becomes "trace(grad_f)"
@@ -82,7 +92,7 @@ problem = d3.IVP([p, b, u, tau1b, tau2b, tau1u, tau2u], namespace=locals())
 #problem.add_equation("div(u) + lift(dot(tau2u,ez),-1) = 0")
 problem.add_equation("div(u) + dot(lift(tau2u,-1),ez) = 0")
 problem.add_equation("dt(b) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
-problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = - dot(u,grad(u))")
+problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = cross_u_curl_u") #cross(u, curl(u))")
 problem.add_equation("b(z=0) = Lz")
 problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
