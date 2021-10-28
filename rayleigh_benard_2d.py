@@ -5,9 +5,10 @@ Usage:
     rayleigh_benard_2d.py [options]
 
 Options:
-    --Nx=<Nx>              Horizontal modes [default: 128]
+    --Nx=<Nx>              Horizontal modes; default is 2x Nz
     --Nz=<Nz>              Vertical modes   [default: 64]
 
+    --run_time_iter=<iter>      How many iterations to run for [default: 20]
 """
 from mpi4py import MPI
 import numpy as np
@@ -29,8 +30,12 @@ ncpu = comm.size
 
 # Parameters
 Lx, Lz = 4, 1
-Nx = int(args['--Nx'])
 Nz = int(args['--Nz'])
+if args['--Nx']:
+    Nx = int(args['--Nx'])
+else:
+    Nx = 2*Nz
+
 Rayleigh = 1e6
 Prandtl = 1
 dealias = 3/2
@@ -87,7 +92,7 @@ problem.add_equation("p(z=Lz) = 0", condition="nx == 0") # Pressure gauge
 # Solver
 solver = problem.build_solver(timestepper)
 solver.stop_sim_time = stop_sim_time
-solver.stop_iteration = 20
+solver.stop_iteration = int(float(args['--run_time_iter']))
 
 # Initial conditions
 zb, zt = zbasis.bounds
