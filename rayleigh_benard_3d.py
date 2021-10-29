@@ -116,9 +116,9 @@ dot = lambda A, B: d3.DotProduct(A, B)
 problem = d3.IVP([p, b, u, tau1b, tau2b, tau1u, tau2u], namespace=locals())
 #problem.add_equation("div(u) + lift(dot(tau2u,ez),-1) = 0")
 problem.add_equation("div(u) + dot(lift(tau2u,-1),ez) = 0")
-problem.add_equation("dt(b) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
+problem.add_equation("dt(b) - kappa*lap(b) - dot(u,ez) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
 problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -dot(u,grad(u))") #cross(u, curl(u))")
-problem.add_equation("b(z=0) = Lz")
+problem.add_equation("b(z=0) = 0")
 problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
 problem.add_equation("u(z=Lz) = 0", condition="nx != 0 or ny != 0")
@@ -135,7 +135,7 @@ solver.stop_iteration = int(float(args['--run_time_iter']))
 zb, zt = zbasis.bounds
 b.fill_random('g', seed=42, distribution='normal', scale=1e-3) # Random noise
 b['g'] *= z * (Lz - z) # Damp noise at walls
-b['g'] += Lz - z # Add linear background
+#b['g'] += Lz - z # Add linear background
 
 # Analysis
 # snapshots = solver.evaluator.add_file_handler('snapshots', sim_dt=0.1, max_writes=50)
