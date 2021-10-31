@@ -40,7 +40,7 @@ Rayleigh = 1e6
 Prandtl = 1
 dealias = 3/2
 stop_sim_time = 30
-timestepper = d3.RK222
+timestepper = d3.SBDF2
 max_timestep = 0.1
 dtype = np.float64
 
@@ -92,7 +92,7 @@ problem = d3.IVP([p, b, u, tau1b, tau2b, tau1u, tau2u], namespace=locals())
 #problem.add_equation("div(u) + lift(dot(tau2u,ez),-1) = 0")
 problem.add_equation("div(u) + dot(lift(tau2u,-1),ez) = 0")
 problem.add_equation("dt(b) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
-problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = cross_u_curl_u") #cross(u, curl(u))")
+problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -dot(u,grad(u))") #cross(u, curl(u))")
 problem.add_equation("b(z=0) = Lz")
 problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
