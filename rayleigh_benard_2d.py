@@ -8,7 +8,10 @@ Options:
     --Nx=<Nx>              Horizontal modes; default is 2x Nz
     --Nz=<Nz>              Vertical modes   [default: 64]
 
+    --Rayleigh=<Rayleigh>       Rayleigh number [default: 1e6]
+
     --run_time_iter=<iter>      How many iterations to run for [default: 20]
+    --run_time_simtime=<run>    How long (simtime) to run for
 """
 from mpi4py import MPI
 import numpy as np
@@ -36,10 +39,13 @@ if args['--Nx']:
 else:
     Nx = 2*Nz
 
-Rayleigh = 1e6
+Rayleigh = float(args['--Rayleigh'])
 Prandtl = 1
 dealias = 3/2
-stop_sim_time = 30
+if args['--run_time_simtime']:
+    stop_sim_time = float(args['--run_time_simtime'])
+else:
+    stop_sim_time = np.inf
 timestepper = d3.SBDF2
 max_timestep = 0.1
 dtype = np.float64
@@ -61,6 +67,8 @@ tau2b = dist.Field(name='tau2b', bases=xbasis)
 tau1u = dist.VectorField(coords, name='tau1u', bases=xbasis)
 tau2u = dist.VectorField(coords, name='tau2u', bases=xbasis)
 
+grid = lambda A: d3.Grid(A)
+
 # Substitutions
 kappa = (Rayleigh * Prandtl)**(-1/2)
 nu = (Rayleigh / Prandtl)**(-1/2)
@@ -70,8 +78,8 @@ ez = dist.VectorField(coords, name='ez')
 ex['g'][0] = 1
 ez['g'][1] = 1
 
-exg = d3.Grid(ex).evaluate()
-ezg = d3.Grid(ez).evaluate()
+exg = grid(ex).evaluate()
+ezg = grid(ez).evaluate()
 
 lift_basis = zbasis.clone_with(a=1/2, b=1/2) # First derivative basis
 lift = lambda A, n: d3.LiftTau(A, lift_basis, n)
@@ -85,7 +93,7 @@ problem = d3.IVP([p, b, u, tau1b, tau2b, tau1u, tau2u], namespace=locals())
 #problem.add_equation("div(u) + lift(dot(tau2u,ez),-1) = 0")
 problem.add_equation("div(u) + dot(lift(tau2u,-1),ez) = 0")
 problem.add_equation("dt(b) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
-problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -skew(u)*div(skew(u))")
+problem.add_equation("dt(u) - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -skew(grid(u))*div(skew(u))")
 problem.add_equation("b(z=0) = Lz")
 problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
@@ -111,13 +119,14 @@ b['g'] += Lz - z # Add linear background
 # snapshots.add_task(d3.dot(u,ex), name='ux')
 # snapshots.add_task(d3.dot(u,ez), name='uz')
 
+cadence = 100
 # CFL
-CFL = d3.CFL(solver, initial_dt=max_timestep, cadence=1, safety=0.5, threshold=0.1,
+CFL = d3.CFL(solver, initial_dt=max_timestep, cadence=cadence, safety=0.5, threshold=0.1,
              max_change=1.5, min_change=0.5, max_dt=max_timestep)
 CFL.add_velocity(u)
 
 # Flow properties
-flow = d3.GlobalFlowProperty(solver, cadence=10)
+flow = d3.GlobalFlowProperty(solver, cadence=cadence)
 flow.add_property(np.sqrt(d3.dot(u,u))/nu, name='Re')
 
 startup_iter = 10
@@ -130,7 +139,7 @@ try:
             main_start = time.time()
         timestep = CFL.compute_timestep()
         solver.step(timestep)
-        if (solver.iteration-1) % 10 == 0:
+        if (solver.iteration-1) % cadence == 0:
             max_Re = flow.max('Re')
             logger.info('Iteration=%i, Time=%e, dt=%e, max(Re)=%f' %(solver.iteration, solver.sim_time, timestep, max_Re))
 except:
