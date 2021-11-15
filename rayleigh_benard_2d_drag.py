@@ -14,6 +14,8 @@ Options:
 
     --run_time_iter=<iter>      How many iterations to run for
     --run_time_simtime=<run>    How long (simtime) to run for
+
+    --label=<label>             Additional label for run output directory
 """
 from mpi4py import MPI
 import numpy as np
@@ -35,6 +37,8 @@ if args['--tau_drag']:
 else:
     τ_drag = 0
 data_dir += '_Nz{}'.format(args['--Nz'])
+if args['--label']:
+    data_dir += '_{:s}'.format(args['--label'])
 
 from dedalus.tools.config import config
 config['logging']['filename'] = os.path.join(data_dir,'logs/dedalus_log')
@@ -119,19 +123,14 @@ ez['g'][1] = 1
 exg = grid(ex).evaluate()
 ezg = grid(ez).evaluate()
 
-lift_basis = zbasis.clone_with(a=1/2, b=1/2) # First derivative basis
+lift_basis = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
 lift = lambda A, n: d3.LiftTau(A, lift_basis, n)
-grad_u = d3.grad(u) + ez*lift(tau1u,-1) # First-order reduction
-grad_b = d3.grad(b) + ez*lift(tau1b,-1) # First-order reduction
 
 b0 = dist.Field(name='b0', bases=zbasis)
 b0['g'] = Lz - z
 
 # Problem
-# First-order form: "div(f)" becomes "trace(grad_f)"
-# First-order form: "lap(f)" becomes "div(grad_f)"
 problem = d3.IVP([p, b, u, tau1b, tau2b, tau1u, tau2u], namespace=locals())
-#problem.add_equation("div(u) + lift(dot(tau2u,ez),-1) = 0")
 problem.add_equation("div(u) + dot(lift(tau2u,-1),ez) = 0")
 problem.add_equation("dt(b) + dot(u, grad(b0)) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
 problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -skew(grid(u))*div(skew(u))")
@@ -149,8 +148,10 @@ solver.stop_iteration = stop_iter
 
 # Initial conditions
 zb, zt = zbasis.bounds
-b.fill_random('g', seed=42, distribution='normal', scale=1e-3) # Random noise
+b.fill_random('g', seed=42, distribution='normal', scale=1e-5) # Random noise
 b['g'] *= z * (Lz - z) # Damp noise at walls
+#b.high_pass_filter(scales=2/Nz)
+b.low_pass_filter(scales=0.5)
 #b['g'] += Lz - z # Add linear background
 
 
