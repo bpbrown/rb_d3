@@ -5,8 +5,9 @@ Usage:
     rayleigh_benard_2d.py [options]
 
 Options:
-    --Nx=<Nx>              Horizontal modes; default is 2x Nz
-    --Nz=<Nz>              Vertical modes   [default: 64]
+    --Nx=<Nx>              Horizontal modes; default is aspect x Nz
+    --Nz=<Nz>              Vertical modes [default: 64]
+    --aspect=<aspect>      Aspect ratio of domain [default: 4]
 
     --tau_drag=<tau_drag>       1/Newtonian drag timescale; default is zero drag
 
@@ -20,14 +21,20 @@ Options:
 from mpi4py import MPI
 import numpy as np
 import time
-import dedalus.public as d3
-import logging
-logger = logging.getLogger(__name__)
 import sys
 import os
 
 from docopt import docopt
 args = docopt(__doc__)
+
+aspect = float(args['--aspect'])
+# Parameters
+Lx, Lz = aspect, 1
+Nz = int(args['--Nz'])
+if args['--Nx']:
+    Nx = int(args['--Nx'])
+else:
+    Nx = int(aspect*Nz)
 
 data_dir = './'+sys.argv[0].split('.py')[0]
 data_dir += '_Ra{}'.format(args['--Rayleigh'])
@@ -36,13 +43,19 @@ if args['--tau_drag']:
     data_dir += '_tau{}'.format(args['--tau_drag'])
 else:
     τ_drag = 0
-data_dir += '_Nz{}'.format(args['--Nz'])
+data_dir += '_Nz{}_Nx{}'.format(Nz, Nx)
 if args['--label']:
     data_dir += '_{:s}'.format(args['--label'])
+
+import logging
+logger = logging.getLogger(__name__)
+dlog = logging.getLogger('evaluator')
+dlog.setLevel(logging.WARNING)
 
 from dedalus.tools.config import config
 config['logging']['filename'] = os.path.join(data_dir,'logs/dedalus_log')
 config['logging']['file_level'] = 'DEBUG'
+
 from dedalus.tools.parallel import Sync
 with Sync() as sync:
     if sync.comm.rank == 0:
@@ -52,6 +65,7 @@ with Sync() as sync:
         if not os.path.exists(logdir):
             os.mkdir(logdir)
 
+import dedalus.public as d3
 
 # TODO: maybe fix plotting to directly handle vectors
 # TODO: optimize and match d2 resolution
@@ -60,14 +74,6 @@ with Sync() as sync:
 comm = MPI.COMM_WORLD
 rank = comm.rank
 ncpu = comm.size
-
-# Parameters
-Lx, Lz = 4, 1
-Nz = int(args['--Nz'])
-if args['--Nx']:
-    Nx = int(args['--Nx'])
-else:
-    Nx = 2*Nz
 
 Rayleigh = float(args['--Rayleigh'])
 Prandtl = 1
