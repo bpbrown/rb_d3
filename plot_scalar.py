@@ -83,6 +83,8 @@ for ax in ax_tau:
     ax.set_ylabel(r'$<\tau>$')
     ax.legend(loc='lower left')
 ax_tau[1].set_yscale('log')
+ylims = ax_tau[1].get_ylim()
+ax_tau[1].set_ylim(max(1e-14, ylims[0]), ylims[1])
 fig_tau.savefig('{:s}/tau_error.pdf'.format(str(output_path)))
 
 fig_f, ax_f = plt.subplots(nrows=2)
@@ -109,7 +111,7 @@ benchmark_set = ['KE', 'Re', 'PE', 'Nu', 'τu', 'τb', 'τu1', 'τb1', 'τu2', '
 i_ten = int(0.9*data[benchmark_set[0]].shape[0])
 for benchmark in benchmark_set:
     print("{:s} benchmark {:14.12g} +- {:4.2g} (averaged from {:g}-{:g})".format(benchmark, np.mean(data[benchmark][i_ten:]), np.std(data[benchmark][i_ten:]), t[i_ten], t[-1]))
-print(40*'-')
-for benchmark in benchmark_set:
-    print("{:s} benchmark {:14.12g} (at t={:g})".format(benchmark, data[benchmark][-1], t[-1]))
+# print(40*'-')
+# for benchmark in benchmark_set:
+#     print("{:s} benchmark {:14.12g} (at t={:g})".format(benchmark, data[benchmark][-1], t[-1]))
 print("total simulation time {:6.2g}".format(t[-1]-t[0]))
