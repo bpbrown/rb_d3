@@ -57,6 +57,14 @@ def main(filename, start, count, tasks, output):
                 pcm = ax.pcolormesh(x, z, task[k,:].T, shading='nearest',cmap=cmap)
                 pmin,pmax = pcm.get_clim()
                 if center_zero:
+                    # use a CDF to find the
+                    H, X = np.histogram(task[k,:], bins = 100, density = True )
+                    dX = X[1] - X[0]
+                    F = np.cumsum(H)*dX
+                    i_min = np.argmin(np.abs(F-0.05))
+                    i_max = np.argmin(np.abs(F-0.95))
+                    pmin = X[i_min]
+                    pmax = X[i_max]
                     if pmin==0: pmin=-1e-8
                     if pmax==0: pmax=1e-8
                     logger.debug("centering zero: {:.2e} -- 0 -- {:.2e}".format(pmin, pmax))
