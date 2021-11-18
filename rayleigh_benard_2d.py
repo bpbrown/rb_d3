@@ -69,7 +69,8 @@ tau2u = dist.VectorField(coords, name='tau2u', bases=xbasis)
 
 grid = lambda A: d3.Grid(A)
 div = lambda A: d3.Divergence(A, index=0)
-skew = lambda A: d3.Skew(A)
+from dedalus.core.operators import Skew
+skew = lambda A: Skew(A)
 # Substitutions
 kappa = (Rayleigh * Prandtl)**(-1/2)
 nu = (Rayleigh / Prandtl)**(-1/2)
@@ -133,10 +134,14 @@ CFL.add_velocity(u)
 flow = d3.GlobalFlowProperty(solver, cadence=cadence)
 flow.add_property(np.sqrt(d3.dot(u,u))/nu, name='Re')
 
+startup_iter = 10
 # Main loop
 try:
     logger.info('Starting loop')
+    start_time = time.time()
     while solver.proceed:
+        if solver.iteration == startup_iter:
+            main_start = time.time()
         timestep = CFL.compute_timestep()
         solver.step(timestep)
         if (solver.iteration-1) % cadence == 0:
@@ -146,4 +151,19 @@ except:
     logger.error('Exception raised, triggering end of main loop.')
     raise
 finally:
+    end_time = time.time()
+
+    startup_time = main_start - start_time
+    main_loop_time = end_time - main_start
+    DOF = Nx*Nz
+    niter = solver.iteration - startup_iter
+    if rank==0:
+        print('performance metrics:')
+        print('    startup time   : {:}'.format(startup_time))
+        print('    main loop time : {:}'.format(main_loop_time))
+        print('    main loop iter : {:d}'.format(niter))
+        print('    wall time/iter : {:f}'.format(main_loop_time/niter))
+        print('          iter/sec : {:f}'.format(niter/main_loop_time))
+        print('DOF-cycles/cpu-sec : {:}'.format(DOF*niter/(ncpu*main_loop_time)))
+        print('DOF and total modes: {:}, {:}'.format(DOF, solver.total_modes))
     solver.log_stats()
