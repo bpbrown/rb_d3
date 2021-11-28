@@ -102,6 +102,7 @@ z = zbasis.local_grid(1)
 p = dist.Field(name='p', bases=(xbasis,zbasis))
 b = dist.Field(name='b', bases=(xbasis,zbasis))
 u = dist.VectorField(coords, name='u', bases=(xbasis,zbasis))
+taup = dist.Field(name='taup')
 tau1b = dist.Field(name='tau1b', bases=xbasis)
 tau2b = dist.Field(name='tau2b', bases=xbasis)
 tau1u = dist.VectorField(coords, name='tau1u', bases=xbasis)
@@ -112,7 +113,8 @@ div = lambda A: d3.Divergence(A, index=0)
 from dedalus.core.operators import Skew
 skew = lambda A: Skew(A)
 #avg = lambda A: d3.Integrate(A, coords)/(Lx*Lz)
-avg = lambda A: d3.Integrate(d3.Integrate(A, coords['x']), coords['z'])/(Lx*Lz)
+integ = lambda A: d3.Integrate(d3.Integrate(A, 'x'), 'z')
+avg = lambda A: integ(A)/(Lx*Lz)
 x_avg = lambda A: d3.Integrate(A, coords['x'])/(Lx)
 dot = lambda A, B: d3.DotProduct(A, B)
 grad = lambda A: d3.Gradient(A, coords)
@@ -121,10 +123,17 @@ grad = lambda A: d3.Gradient(A, coords)
 kappa = (Rayleigh * Prandtl)**(-1/2)
 nu = (Rayleigh / Prandtl)**(-1/2)
 
+zb1 = zbasis.clone_with(a=zbasis.a+1, b=zbasis.b+1)
+zb2 = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
 ex = dist.VectorField(coords, name='ex')
-ez = dist.VectorField(coords, name='ez')
+ez = dist.VectorField(coords, name='ez', bases=(zbasis))
+
+ez1 = dist.VectorField(coords, name='ez1', bases=(zb1))
+ez2 = dist.VectorField(coords, name='ez2', bases=(zb2))
 ex['g'][0] = 1
 ez['g'][1] = 1
+ez1['g'][1] = 1
+ez2['g'][1] = 1
 
 exg = grid(ex).evaluate()
 ezg = grid(ez).evaluate()
@@ -132,20 +141,22 @@ ezg = grid(ez).evaluate()
 lift_basis = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
 lift = lambda A, n: d3.LiftTau(A, lift_basis, n)
 
+lift_basis1 = zbasis.clone_with(a=zbasis.a+1, b=zbasis.b+1)
+lift1 = lambda A, n: d3.LiftTau(A, lift_basis1, n)
+
 b0 = dist.Field(name='b0', bases=zbasis)
 b0['g'] = Lz - z
 
 # Problem
-problem = d3.IVP([p, b, u, tau1b, tau2b, tau1u, tau2u], namespace=locals())
-problem.add_equation("div(u) + dot(lift(tau2u,-1),ez) = 0")
+problem = d3.IVP([p, b, u, taup, tau1b, tau2b, tau1u, tau2u], namespace=locals())
+problem.add_equation("div(u) + dot(lift1(tau2u,-1),ez1) + taup = 0")
+problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez2 = -skew(grid(u))*div(skew(u))")
 problem.add_equation("dt(b) + dot(u, grad(b0)) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
-problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -skew(grid(u))*div(skew(u))")
 problem.add_equation("b(z=0) = 0")
 problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
-problem.add_equation("u(z=Lz) = 0", condition="nx != 0")
-problem.add_equation("dot(ex,u)(z=Lz) = 0", condition="nx == 0")
-problem.add_equation("p(z=Lz) = 0", condition="nx == 0") # Pressure gauge
+problem.add_equation("u(z=Lz) = 0")
+problem.add_equation("integ(p) = 0") # Pressure gauge
 
 # Solver
 solver = problem.build_solver(timestepper)
@@ -156,9 +167,8 @@ solver.stop_iteration = stop_iter
 zb, zt = zbasis.bounds
 b.fill_random('g', seed=42, distribution='normal', scale=1e-5) # Random noise
 b['g'] *= z * (Lz - z) # Damp noise at walls
-#b.high_pass_filter(scales=2/Nz)
-b.low_pass_filter(scales=0.5)
-#b['g'] += Lz - z # Add linear background
+b.low_pass_filter(scales=0.25)
+
 
 
 KE = 0.5*dot(u,u)
@@ -170,7 +180,7 @@ flux_κ = -kappa*dot(grad(b+b0),ez)
 flux_κ.store_last=True
 
 # Analysis
-snapshots = solver.evaluator.add_file_handler(data_dir+'/snapshots', sim_dt=0.1, max_writes=50)
+snapshots = solver.evaluator.add_file_handler(data_dir+'/snapshots', sim_dt=0.1, max_writes=10)
 snapshots.add_task(b+b0, name='b')
 snapshots.add_task(ω, name='vorticity')
 snapshots.add_task(ω**2, name='enstrophy')
@@ -185,8 +195,9 @@ traces.add_task(x_avg(np.sqrt(dot(tau1u,tau1u))), name='τu1')
 traces.add_task(x_avg(np.sqrt(dot(tau2u,tau2u))), name='τu2')
 traces.add_task(x_avg(np.sqrt(tau1b**2)), name='τb1')
 traces.add_task(x_avg(np.sqrt(tau2b**2)), name='τb2')
+traces.add_task(np.sqrt(taup**2), name='τp')
 
-cadence = 100
+cadence = 10
 # CFL
 CFL = d3.CFL(solver, initial_dt=max_timestep, cadence=1, safety=0.2, threshold=0.1,
              max_change=1.5, min_change=0.5, max_dt=max_timestep)
@@ -203,6 +214,8 @@ flow.add_property(np.sqrt(dot(tau1u,tau1u)), name='τu1')
 flow.add_property(np.sqrt(dot(tau2u,tau2u)), name='τu2')
 flow.add_property(np.sqrt(tau1b**2), name='τb1')
 flow.add_property(np.sqrt(tau2b**2), name='τb2')
+flow.add_property(np.sqrt(tau2b**2), name='τb2')
+flow.add_property(np.sqrt(taup**2), name='τp')
 
 startup_iter = 10
 # Main loop
@@ -221,7 +234,7 @@ try:
             avg_PE = flow.grid_average('PE')
             avg_KE = flow.grid_average('KE')
             avg_Nu = 1+flow.grid_average('f_c')/flow.grid_average('f_κ')
-            max_τ = np.max([flow.max('τu1'),flow.max('τu2'),flow.max('τb1'),flow.max('τb2')])
+            max_τ = np.max([flow.max('τu1'),flow.max('τu2'),flow.max('τb1'),flow.max('τb2'),flow.max('τp')])
             logger.info('Iteration={:d}, Time={:.3e}, dt={:.1e}, PE={:.3e}, KE={:.3e}, Re={:.2g}, Nu={:.2g}, τ={:.2e}'. format(solver.iteration, solver.sim_time, timestep, avg_PE, avg_KE, avg_Re, avg_Nu, max_τ))
             good_solution = np.isfinite(max_Re)
 except:
@@ -242,3 +255,4 @@ finally:
         print('    wall time/iter : {:f}'.format(main_loop_time/niter))
         print('          iter/sec : {:f}'.format(niter/main_loop_time))
         print('DOF-cycles/cpu-sec : {:}'.format(DOF*niter/(ncpu*main_loop_time)))
+    solver.log_stats()
