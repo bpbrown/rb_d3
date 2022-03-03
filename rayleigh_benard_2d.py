@@ -11,6 +11,8 @@ Options:
 
     --tau_drag=<tau_drag>       1/Newtonian drag timescale; default is zero drag
 
+    --stress_free               Use stress free boundary conditions
+
     --Rayleigh=<Rayleigh>       Rayleigh number [default: 1e6]
 
     --run_time_iter=<iter>      How many iterations to run for
@@ -36,7 +38,11 @@ if args['--Nx']:
 else:
     Nx = int(aspect*Nz)
 
+stress_free = args['--stress_free']
+
 data_dir = './'+sys.argv[0].split('.py')[0]
+if stress_free:
+    data_dir += '_SF'
 data_dir += '_Ra{}'.format(args['--Rayleigh'])
 if args['--tau_drag']:
     τ_drag = float(args['--tau_drag'])
@@ -66,10 +72,6 @@ with Sync() as sync:
             os.mkdir(logdir)
 
 import dedalus.public as d3
-
-# TODO: maybe fix plotting to directly handle vectors
-# TODO: optimize and match d2 resolution
-# TODO: get unit vectors from coords?
 
 comm = MPI.COMM_WORLD
 rank = comm.rank
@@ -147,15 +149,25 @@ lift1 = lambda A, n: d3.LiftTau(A, lift_basis1, n)
 b0 = dist.Field(name='b0', bases=zbasis)
 b0['g'] = Lz - z
 
+e_ij = grad(u) + transpose(grad(u))
+
 # Problem
 problem = d3.IVP([p, b, u, taup, tau1b, tau2b, tau1u, tau2u], namespace=locals())
 problem.add_equation("div(u) + dot(lift1(tau2u,-1),ez1) + taup = 0")
 problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez2 = -skew(grid(u))*div(skew(u))")
 problem.add_equation("dt(b) + dot(u, grad(b0)) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
 problem.add_equation("b(z=0) = 0")
-problem.add_equation("u(z=0) = 0")
+if stress_free:
+    problem.add_equation("dot(ez, dot(ex,e_ij(z=0))) = 0")
+    problem.add_equation("dot(ez, u(z=0)) = 0")
+else:
+    problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
-problem.add_equation("u(z=Lz) = 0")
+if stress_free:
+    problem.add_equation("dot(ez, dot(ex,e_ij(z=Lz))) = 0")
+    problem.add_equation("dot(ez, u(z=Lz)) = 0")
+else:
+    problem.add_equation("u(z=Lz) = 0")
 problem.add_equation("integ(p) = 0") # Pressure gauge
 
 # Solver
