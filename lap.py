@@ -150,6 +150,16 @@ for sp in solver.subproblems:
     LHS = (sp.L_min) @ sp.pre_right
     plot_sparse(LHS)
     ax.set_title('LHS (m = %i)' %m)
+    # Plot L
+    ax = fig.add_subplot(1, 3, 2)
+    L = sp.LHS_solvers[-1].LU.L
+    plot_sparse(L)
+    ax.set_title('L (m = %i)' %m)
+    # Plot U
+    ax = fig.add_subplot(1, 3, 3)
+    U = sp.LHS_solvers[-1].LU.U
+    plot_sparse(U)
+    ax.set_title('U (m = %i)' %m)
     plt.tight_layout()
     plt.savefig("m_%i.pdf" %m)
     fig.clear()
