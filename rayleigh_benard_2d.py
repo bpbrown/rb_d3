@@ -120,6 +120,7 @@ avg = lambda A: integ(A)/(Lx*Lz)
 x_avg = lambda A: d3.Integrate(A, coords['x'])/(Lx)
 dot = lambda A, B: d3.DotProduct(A, B)
 grad = lambda A: d3.Gradient(A, coords)
+transpose = lambda A: d3.TransposeComponents(A)
 
 # Substitutions
 kappa = (Rayleigh * Prandtl)**(-1/2)
@@ -141,10 +142,10 @@ exg = grid(ex).evaluate()
 ezg = grid(ez).evaluate()
 
 lift_basis = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
-lift = lambda A, n: d3.LiftTau(A, lift_basis, n)
+lift = lambda A, n: d3.Lift(A, lift_basis, n)
 
 lift_basis1 = zbasis.clone_with(a=zbasis.a+1, b=zbasis.b+1)
-lift1 = lambda A, n: d3.LiftTau(A, lift_basis1, n)
+lift1 = lambda A, n: d3.Lift(A, lift_basis1, n)
 
 b0 = dist.Field(name='b0', bases=zbasis)
 b0['g'] = Lz - z
@@ -158,14 +159,14 @@ problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) +
 problem.add_equation("dt(b) + dot(u, grad(b0)) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
 problem.add_equation("b(z=0) = 0")
 if stress_free:
-    problem.add_equation("dot(ez, dot(ex,e_ij(z=0))) = 0")
-    problem.add_equation("dot(ez, u(z=0)) = 0")
+    problem.add_equation("dot(ez, dot(ex,e_ij))(z=0) = 0")
+    problem.add_equation("dot(ez, u)(z=0) = 0")
 else:
     problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
 if stress_free:
-    problem.add_equation("dot(ez, dot(ex,e_ij(z=Lz))) = 0")
-    problem.add_equation("dot(ez, u(z=Lz)) = 0")
+    problem.add_equation("dot(ez, dot(ex,e_ij))(z=Lz) = 0")
+    problem.add_equation("dot(ez, u)(z=Lz) = 0")
 else:
     problem.add_equation("u(z=Lz) = 0")
 problem.add_equation("integ(p) = 0") # Pressure gauge
