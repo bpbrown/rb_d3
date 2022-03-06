@@ -129,14 +129,10 @@ nu = (Rayleigh / Prandtl)**(-1/2)
 zb1 = zbasis.clone_with(a=zbasis.a+1, b=zbasis.b+1)
 zb2 = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
 ex = dist.VectorField(coords, name='ex')
-ez = dist.VectorField(coords, name='ez', bases=(zbasis))
+ez = dist.VectorField(coords, name='ez')
 
-ez1 = dist.VectorField(coords, name='ez1', bases=(zb1))
-ez2 = dist.VectorField(coords, name='ez2', bases=(zb2))
 ex['g'][0] = 1
 ez['g'][1] = 1
-ez1['g'][1] = 1
-ez2['g'][1] = 1
 
 exg = grid(ex).evaluate()
 ezg = grid(ez).evaluate()
@@ -154,19 +150,19 @@ e_ij = grad(u) + transpose(grad(u))
 
 # Problem
 problem = d3.IVP([p, b, u, taup, tau1b, tau2b, tau1u, tau2u], namespace=locals())
-problem.add_equation("div(u) + dot(lift1(tau2u,-1),ez1) + taup = 0")
-problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez2 = -skew(grid(u))*div(skew(u))")
+problem.add_equation("div(u) + dot(lift1(tau2u,-1),ez) + taup = 0")
+problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -skew(grid(u))*div(skew(u))")
 problem.add_equation("dt(b) + dot(u, grad(b0)) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b))")
 problem.add_equation("b(z=0) = 0")
 if stress_free:
-    problem.add_equation("dot(ez, dot(ex,e_ij))(z=0) = 0")
-    problem.add_equation("dot(ez, u)(z=0) = 0")
+    problem.add_equation("dot(ez, dot(ex,e_ij(z=0))) = 0")
+    problem.add_equation("dot(ez, u(z=0)) = 0")
 else:
     problem.add_equation("u(z=0) = 0")
 problem.add_equation("b(z=Lz) = 0")
 if stress_free:
-    problem.add_equation("dot(ez, dot(ex,e_ij))(z=Lz) = 0")
-    problem.add_equation("dot(ez, u)(z=Lz) = 0")
+    problem.add_equation("dot(ez, dot(ex,e_ij(z=Lz))) = 0")
+    problem.add_equation("dot(ez, u(z=Lz)) = 0")
 else:
     problem.add_equation("u(z=Lz) = 0")
 problem.add_equation("integ(p) = 0") # Pressure gauge
