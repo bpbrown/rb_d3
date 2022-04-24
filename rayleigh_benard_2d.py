@@ -145,8 +145,8 @@ e_ij = grad(u) + transpose(grad(u))
 # Problem
 problem = d3.IVP([p, b, u, τ_p, τ_b1, τ_b2, τ_u1, τ_u2], namespace=locals())
 problem.add_equation("div(u) + lift1(τ_u2,-1)@ez + τ_p = 0")
-problem.add_equation("dt(u) + tau_drag*u - nu*lap(u) + grad(p) + lift(τ_u2,-2) + lift(τ_u1,-1) - b*ez = -skew(grid(u))*div(skew(u))")
-problem.add_equation("dt(b) + u@grad(b0) - kappa*lap(b) + lift(τ_b2,-2) + lift(τ_b1,-1) = - u@grad(b)")
+problem.add_equation("dt(u) + tau_drag*u - nu*lap(u) + grad(p) + nu*lift(τ_u2,-2) + lift(τ_u1,-1) - b*ez = -skew(grid(u))*div(skew(u))")
+problem.add_equation("dt(b) + u@grad(b0) - kappa*lap(b) + kappa*lift(τ_b2,-2) + lift(τ_b1,-1) = - u@grad(b)")
 if stress_free:
     problem.add_equation("ez@(ex@e_ij(z=0)) = 0")
     problem.add_equation("ez@u(z=0) = 0")
