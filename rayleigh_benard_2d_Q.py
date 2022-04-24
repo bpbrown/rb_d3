@@ -46,10 +46,10 @@ if stress_free:
     data_dir += '_SF'
 data_dir += '_Ra{}'.format(args['--Rayleigh'])
 if args['--tau_drag']:
-    τ_drag = float(args['--tau_drag'])
+    tau_drag = float(args['--tau_drag'])
     data_dir += '_tau{}'.format(args['--tau_drag'])
 else:
-    τ_drag = 0
+    tau_drag = 0
 data_dir += '_Nz{}_Nx{}'.format(Nz, Nx)
 if args['--label']:
     data_dir += '_{:s}'.format(args['--label'])
@@ -105,11 +105,11 @@ z = zbasis.local_grid(1)
 p = dist.Field(name='p', bases=(xbasis,zbasis))
 b = dist.Field(name='b', bases=(xbasis,zbasis))
 u = dist.VectorField(coords, name='u', bases=(xbasis,zbasis))
-taup = dist.Field(name='taup')
-tau1b = dist.Field(name='tau1b', bases=xbasis)
-tau2b = dist.Field(name='tau2b', bases=xbasis)
-tau1u = dist.VectorField(coords, name='tau1u', bases=xbasis)
-tau2u = dist.VectorField(coords, name='tau2u', bases=xbasis)
+τ_p = dist.Field(name='τ_p')
+τ_b1 = dist.Field(name='τ_b1', bases=xbasis)
+τ_b2 = dist.Field(name='τ_b2', bases=xbasis)
+τ_u1 = dist.VectorField(coords, name='τ_u1', bases=xbasis)
+τ_u2 = dist.VectorField(coords, name='τ_u2', bases=xbasis)
 
 grid = lambda A: d3.Grid(A)
 div = lambda A: d3.Divergence(A, index=0)
@@ -126,18 +126,7 @@ transpose = lambda A: d3.TransposeComponents(A)
 kappa = (Rayleigh * Prandtl)**(-1/2)
 nu = (Rayleigh / Prandtl)**(-1/2)
 
-logger.info("nu = {:.3g}, kappa = {:.3g}".format(nu, kappa))
-
-zb1 = zbasis.clone_with(a=zbasis.a+1, b=zbasis.b+1)
-zb2 = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
-ex = dist.VectorField(coords, name='ex')
-ez = dist.VectorField(coords, name='ez')
-
-ex['g'][0] = 1
-ez['g'][1] = 1
-
-exg = grid(ex).evaluate()
-ezg = grid(ez).evaluate()
+ex, ez = coords.unit_vector_fields(dist)
 
 source = dist.Field(name='source', bases=(xbasis,zbasis))
 source['g'] = kappa
@@ -155,10 +144,10 @@ b0['g'] = 0
 e_ij = grad(u) + transpose(grad(u))
 
 # Problem
-problem = d3.IVP([p, b, u, taup, tau1b, tau2b, tau1u, tau2u], namespace=locals())
-problem.add_equation("div(u) + lift1(tau2u,-1)@ez + taup = 0")
-problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -skew(grid(u))*div(skew(u))")
-problem.add_equation("dt(b) + u@grad(b0) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - u@grad(b) + source_g")
+problem = d3.IVP([p, b, u, τ_p, τ_b1, τ_b2, τ_u1, τ_u2], namespace=locals())
+problem.add_equation("div(u) + lift1(τ_u2,-1)@ez + τ_p = 0")
+problem.add_equation("dt(u) + tau_drag*u - nu*lap(u) + grad(p) - b*ez + nu*lift(τ_u2,-2) + lift(τ_u1,-1) = -skew(grid(u))*div(skew(u))")
+problem.add_equation("dt(b) + u@grad(b0) - kappa*lap(b) + kappa*lift(τ_b2,-2) + lift(τ_b1,-1) = - u@grad(b) + source_g")
 if stress_free:
     problem.add_equation("ez@(ex@e_ij(z=0)) = 0")
     problem.add_equation("ez@u(z=0) = 0")
@@ -182,8 +171,6 @@ b.fill_random('g', seed=42, distribution='normal', scale=1e-5) # Random noise
 b['g'] *= z * (Lz - z) # Damp noise at walls
 b.low_pass_filter(scales=0.25)
 
-
-
 KE = 0.5*u@u
 PE = b+b0
 ω = -div(skew(u))
@@ -204,11 +191,11 @@ traces.add_task(avg(PE), name='PE')
 traces.add_task(np.sqrt(2*avg(KE))/nu, name='Re')
 traces.add_task(avg(ω**2), name='enstrophy')
 traces.add_task(1 + avg(flux_c)/avg(flux_κ), name='Nu')
-traces.add_task(x_avg(np.sqrt(tau1u@tau1u)), name='τu1')
-traces.add_task(x_avg(np.sqrt(tau2u@tau2u)), name='τu2')
-traces.add_task(x_avg(np.sqrt(tau1b**2)), name='τb1')
-traces.add_task(x_avg(np.sqrt(tau2b**2)), name='τb2')
-traces.add_task(np.sqrt(taup**2), name='τp')
+traces.add_task(x_avg(np.sqrt(τ_u1@τ_u1)), name='τu1')
+traces.add_task(x_avg(np.sqrt(τ_u2@τ_u2)), name='τu2')
+traces.add_task(x_avg(np.sqrt(τ_b1**2)), name='τb1')
+traces.add_task(x_avg(np.sqrt(τ_b2**2)), name='τb2')
+traces.add_task(np.sqrt(τ_p**2), name='τp')
 
 cadence = 10
 # CFL
@@ -223,11 +210,11 @@ flow.add_property(KE, name='KE')
 flow.add_property(PE, name='PE')
 flow.add_property(flux_c, name='f_c')
 flow.add_property(flux_κ, name='f_κ')
-flow.add_property(np.sqrt(tau1u@tau1u), name='τu1')
-flow.add_property(np.sqrt(tau2u@tau2u), name='τu2')
-flow.add_property(np.sqrt(tau1b**2), name='τb1')
-flow.add_property(np.sqrt(tau2b**2), name='τb2')
-flow.add_property(np.sqrt(taup**2), name='τp')
+flow.add_property(np.sqrt(τ_u1@τ_u1), name='τu1')
+flow.add_property(np.sqrt(τ_u2@τ_u2), name='τu2')
+flow.add_property(np.sqrt(τ_b1**2), name='τb1')
+flow.add_property(np.sqrt(τ_b2**2), name='τb2')
+flow.add_property(np.sqrt(τ_p**2), name='τp')
 
 startup_iter = 10
 # Main loop
