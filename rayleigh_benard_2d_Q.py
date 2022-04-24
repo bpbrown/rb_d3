@@ -119,13 +119,14 @@ skew = lambda A: Skew(A)
 integ = lambda A: d3.Integrate(d3.Integrate(A, 'x'), 'z')
 avg = lambda A: integ(A)/(Lx*Lz)
 x_avg = lambda A: d3.Integrate(A, coords['x'])/(Lx)
-dot = lambda A, B: d3.DotProduct(A, B)
 grad = lambda A: d3.Gradient(A, coords)
 transpose = lambda A: d3.TransposeComponents(A)
 
 # Substitutions
 kappa = (Rayleigh * Prandtl)**(-1/2)
 nu = (Rayleigh / Prandtl)**(-1/2)
+
+logger.info("nu = {:.3g}, kappa = {:.3g}".format(nu, kappa))
 
 zb1 = zbasis.clone_with(a=zbasis.a+1, b=zbasis.b+1)
 zb2 = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
@@ -139,7 +140,7 @@ exg = grid(ex).evaluate()
 ezg = grid(ez).evaluate()
 
 source = dist.Field(name='source', bases=(xbasis,zbasis))
-source['g'] = 3*kappa
+source['g'] = kappa
 source_g = d3.Grid(source).evaluate()
 
 lift_basis = zbasis.clone_with(a=zbasis.a+2, b=zbasis.b+2)
@@ -155,21 +156,19 @@ e_ij = grad(u) + transpose(grad(u))
 
 # Problem
 problem = d3.IVP([p, b, u, taup, tau1b, tau2b, tau1u, tau2u], namespace=locals())
-problem.add_equation("div(u) + dot(lift1(tau2u,-1),ez) + taup = 0")
+problem.add_equation("div(u) + lift1(tau2u,-1)@ez + taup = 0")
 problem.add_equation("dt(u) + τ_drag*u - nu*lap(u) + grad(p) + lift(tau2u,-2) + lift(tau1u,-1) - b*ez = -skew(grid(u))*div(skew(u))")
-problem.add_equation("dt(b) + dot(u, grad(b0)) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - dot(u,grad(b)) + source_g")
-problem.add_equation("dot(ez, grad(b))(z=0) = 0")
+problem.add_equation("dt(b) + u@grad(b0) - kappa*lap(b) + lift(tau2b,-2) + lift(tau1b,-1) = - u@grad(b) + source_g")
 if stress_free:
-    problem.add_equation("dot(ez, dot(ex,e_ij(z=0))) = 0")
-    problem.add_equation("dot(ez, u(z=0)) = 0")
+    problem.add_equation("ez@(ex@e_ij(z=0)) = 0")
+    problem.add_equation("ez@u(z=0) = 0")
+    problem.add_equation("ez@(ex@e_ij(z=Lz)) = 0")
+    problem.add_equation("ez@u(z=Lz) = 0")
 else:
     problem.add_equation("u(z=0) = 0")
-problem.add_equation("b(z=Lz) = 0")
-if stress_free:
-    problem.add_equation("dot(ez, dot(ex,e_ij(z=Lz))) = 0")
-    problem.add_equation("dot(ez, u(z=Lz)) = 0")
-else:
     problem.add_equation("u(z=Lz) = 0")
+problem.add_equation("ez@grad(b)(z=0) = 0")
+problem.add_equation("b(z=Lz) = 0")
 problem.add_equation("integ(p) = 0") # Pressure gauge
 
 # Solver
@@ -185,12 +184,12 @@ b.low_pass_filter(scales=0.25)
 
 
 
-KE = 0.5*dot(u,u)
+KE = 0.5*u@u
 PE = b+b0
 ω = -div(skew(u))
-flux_c = dot(u, ez)*(b0+b)
+flux_c = u@ez*(b0+b)
 flux_c.store_last=True
-flux_κ = -kappa*dot(grad(b+b0),ez)
+flux_κ = -kappa*grad(b+b0)@ez
 flux_κ.store_last=True
 
 # Analysis
@@ -205,8 +204,8 @@ traces.add_task(avg(PE), name='PE')
 traces.add_task(np.sqrt(2*avg(KE))/nu, name='Re')
 traces.add_task(avg(ω**2), name='enstrophy')
 traces.add_task(1 + avg(flux_c)/avg(flux_κ), name='Nu')
-traces.add_task(x_avg(np.sqrt(dot(tau1u,tau1u))), name='τu1')
-traces.add_task(x_avg(np.sqrt(dot(tau2u,tau2u))), name='τu2')
+traces.add_task(x_avg(np.sqrt(tau1u@tau1u)), name='τu1')
+traces.add_task(x_avg(np.sqrt(tau2u@tau2u)), name='τu2')
 traces.add_task(x_avg(np.sqrt(tau1b**2)), name='τb1')
 traces.add_task(x_avg(np.sqrt(tau2b**2)), name='τb2')
 traces.add_task(np.sqrt(taup**2), name='τp')
@@ -219,15 +218,14 @@ CFL.add_velocity(u)
 
 # Flow properties
 flow = d3.GlobalFlowProperty(solver, cadence=cadence)
-flow.add_property(np.sqrt(d3.dot(u,u))/nu, name='Re')
+flow.add_property(np.sqrt(u@u)/nu, name='Re')
 flow.add_property(KE, name='KE')
 flow.add_property(PE, name='PE')
 flow.add_property(flux_c, name='f_c')
 flow.add_property(flux_κ, name='f_κ')
-flow.add_property(np.sqrt(dot(tau1u,tau1u)), name='τu1')
-flow.add_property(np.sqrt(dot(tau2u,tau2u)), name='τu2')
+flow.add_property(np.sqrt(tau1u@tau1u), name='τu1')
+flow.add_property(np.sqrt(tau2u@tau2u), name='τu2')
 flow.add_property(np.sqrt(tau1b**2), name='τb1')
-flow.add_property(np.sqrt(tau2b**2), name='τb2')
 flow.add_property(np.sqrt(tau2b**2), name='τb2')
 flow.add_property(np.sqrt(taup**2), name='τp')
 
