@@ -21,7 +21,6 @@ Options:
 
     --label=<label>             Additional label for run output directory
 """
-from mpi4py import MPI
 import numpy as np
 import time
 import sys
@@ -29,6 +28,7 @@ import os
 
 from docopt import docopt
 args = docopt(__doc__)
+
 
 aspect = float(args['--aspect'])
 # Parameters
@@ -57,11 +57,6 @@ data_dir += '_Nz{}_Nx{}'.format(Nz, Nx)
 if args['--label']:
     data_dir += '_{:s}'.format(args['--label'])
 
-import logging
-logger = logging.getLogger(__name__)
-dlog = logging.getLogger('evaluator')
-dlog.setLevel(logging.WARNING)
-
 from dedalus.tools.config import config
 config['logging']['filename'] = os.path.join(data_dir,'logs/dedalus_log')
 config['logging']['file_level'] = 'DEBUG'
@@ -75,8 +70,16 @@ with Sync() as sync:
         if not os.path.exists(logdir):
             os.mkdir(logdir)
 
+
 import dedalus.public as d3
 
+import logging
+logger = logging.getLogger(__name__)
+dlog = logging.getLogger('evaluator')
+dlog.setLevel(logging.WARNING)
+logger.info("saving data in {}".format(data_dir))
+
+from mpi4py import MPI
 comm = MPI.COMM_WORLD
 rank = comm.rank
 ncpu = comm.size
@@ -142,11 +145,13 @@ b0['g'] = Lz - z
 
 e_ij = grad(u) + transpose(grad(u))
 
+nu_inv = 1/nu
+
 # Problem
 problem = d3.IVP([p, b, u, τ_p, τ_b1, τ_b2, τ_u1, τ_u2], namespace=locals())
-problem.add_equation("div(u) + lift1(τ_u2,-1)@ez + τ_p = 0")
-problem.add_equation("dt(u) + tau_drag*u - nu*lap(u) + grad(p) - b*ez + nu*lift(τ_u2,-2) + lift(τ_u1,-1) = -skew(grid(u))*div(skew(u))")
-problem.add_equation("dt(b) + u@grad(b0) - kappa*lap(b) + kappa*lift(τ_b2,-2) + lift(τ_b1,-1) = - u@grad(b)")
+problem.add_equation("div(u) + nu_inv*lift1(τ_u2,-1)@ez + τ_p = 0")
+problem.add_equation("dt(u) + tau_drag*u - nu*lap(u) + grad(p) - b*ez + lift(τ_u2,-2) + lift(τ_u1,-1) = -skew(grid(u))*div(skew(u))")
+problem.add_equation("dt(b) + u@grad(b0) - kappa*lap(b) + lift(τ_b2,-2) + lift(τ_b1,-1) = - u@grad(b)")
 if stress_free:
     problem.add_equation("ez@(ex@e_ij(z=0)) = 0")
     problem.add_equation("ez@u(z=0) = 0")
