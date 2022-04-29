@@ -57,19 +57,8 @@ data_dir += '_Nz{}_Nx{}'.format(Nz, Nx)
 if args['--label']:
     data_dir += '_{:s}'.format(args['--label'])
 
-from dedalus.tools.config import config
-config['logging']['filename'] = os.path.join(data_dir,'logs/dedalus_log')
-config['logging']['file_level'] = 'DEBUG'
-
-from dedalus.tools.parallel import Sync
-with Sync() as sync:
-    if sync.comm.rank == 0:
-        if not os.path.exists('{:s}/'.format(data_dir)):
-            os.mkdir('{:s}/'.format(data_dir))
-        logdir = os.path.join(data_dir,'logs')
-        if not os.path.exists(logdir):
-            os.mkdir(logdir)
-
+import dedalus.tools.logging as dedalus_logging
+dedalus_logging.add_file_handler(data_dir+'/logs/dedalus_log', 'DEBUG')
 
 import dedalus.public as d3
 
